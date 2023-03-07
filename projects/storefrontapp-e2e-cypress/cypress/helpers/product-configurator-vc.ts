@@ -18,24 +18,32 @@ const conflictHeaderGroupSelector =
 export const UPDATE_CONFIG_ALIAS = '@updateConfig';
 
 /**
- * Alias used for updating the config
+ * Alias used for reading the config
  */
 export const GET_CONFIG_ALIAS = '@readConfig';
+
+/**
+ * Alias used for reading the config prices
+ */
+export const CONFIG_PRICING_ALIAS = '@readConfigPricing';
 
 /**
  * Navigates to the product configuration page.
  *
  * @param {string} shopName - shop name
  * @param {string} productId - Product ID
+ * @param {boolean} isPricingEnabled - will wait also for pricing request in case pricing is enabled
  * @return {Chainable<Window>} - New configuration window
  */
-export function goToConfigurationPage(shopName: string, productId: string) {
-  //TODO: remove registerConfigurationRoute
-  //registerConfigurationRoute();
+export function goToConfigurationPage(
+  shopName: string,
+  productId: string,
+  isPricingEnabled?: boolean
+) {
   const location = `/${shopName}/en/USD/configure/vc/product/entityKey/${productId}`;
   cy.visit(location);
-  //cy.wait('@configure_product');
   this.checkConfigPageDisplayed();
+  waitForRequest('', isPricingEnabled);
 }
 
 /**
@@ -253,10 +261,12 @@ export function checkConflictDescriptionDisplayed(description: string): void {
 function clickOnConflictSolverLink(attribute: string, linkName: string): void {
   checkGhostAnimationNotDisplayed();
   isConflictLinkAttached(attribute);
-  cy.get('cx-configurator-attribute-header').within(() => {
-    cy.get(`#cx-configurator--attribute-msg--${attribute}`, {
+  cy.get('cx-configurator-attribute-header').as('conf');
+  cy.get('@conf')
+    .find(`#cx-configurator--attribute-msg--${attribute}`, {
       timeout: 10000,
-    }).within(() => {
+    })
+    .within(() => {
       cy.log('Click conflict link ' + linkName);
       cy.get('a.cx-action-link')
         .click()
@@ -264,7 +274,6 @@ function clickOnConflictSolverLink(attribute: string, linkName: string): void {
           checkGhostAnimationNotDisplayed();
         });
     });
-  });
 }
 
 /**
@@ -273,13 +282,14 @@ function clickOnConflictSolverLink(attribute: string, linkName: string): void {
  * @param attribute - Attribute name
  */
 export function isConflictLinkAttached(attribute: string): void {
-  cy.get('cx-configurator-attribute-header').within(() => {
-    cy.get(`#cx-configurator--attribute-msg--${attribute}`, {
+  cy.get('cx-configurator-attribute-header').as('conf');
+  cy.get('@conf')
+    .find(`#cx-configurator--attribute-msg--${attribute}`, {
       timeout: 10000,
-    }).within(() => {
+    })
+    .within(() => {
       cy.get('a.cx-action-link').wait(1000);
     });
-  });
 }
 
 /**
@@ -290,7 +300,7 @@ export function isConflictLinkAttached(attribute: string): void {
  */
 export function clickOnViewInConfiguration(attribute: string): void {
   cy.log('Click View in Configuration Link');
-  clickOnConflictSolverLink(attribute, 'iew in Configuration Link');
+  clickOnConflictSolverLink(attribute, 'View in Configuration Link');
 }
 
 /**
@@ -309,7 +319,7 @@ export function clickOnViewInConfigurationAndWait(attribute: string): void {
  */
 export function checkViewInConfigurationLinkDisplayed(attribute: string): void {
   cy.log('Verify whether View in Configuration Link is displayed');
-  this.checkConflictLinkDisplayed(attribute, 'View in Configuration Link');
+  this.checkConflictLink(attribute, 'View in Configuration Link', true);
 }
 
 /**
@@ -317,24 +327,55 @@ export function checkViewInConfigurationLinkDisplayed(attribute: string): void {
  */
 export function checkConflictDetectedLinkDisplayed(attribute: string): void {
   cy.log('Verify whether Conflict Detected - View Details Link is displayed');
-  this.checkConflictLinkDisplayed(
+  this.checkConflictLink(
     attribute,
-    'Conflict Detected - View Details Link'
+    'Conflict Detected - View Details Link',
+    true
+  );
+}
+
+/**
+ * Verifies whether the view in configuration link is NOT displayed.
+ */
+export function checkViewInConfigurationLinkNotDisplayed(
+  attribute: string
+): void {
+  cy.log('Verify whether View in Configuration Link is NOT displayed');
+  this.checkConflictLink(attribute, 'View in Configuration Link', false);
+}
+
+/**
+ * Verifies whether the conflict detected - view details link is NOT displayed.
+ */
+export function checkConflictDetectedLinkNotDisplayed(attribute: string): void {
+  cy.log(
+    'Verify whether Conflict Detected - View Details Link is NOT displayed'
+  );
+  this.checkConflictLink(
+    attribute,
+    'Conflict Detected - View Details Link',
+    false
   );
 }
 
 /**
  * Verifies whether the conflict link is displayed.
  */
-export function checkConflictLinkDisplayed(
+export function checkConflictLink(
   attribute: string,
-  linkName: string
+  linkName: string,
+  isLinkDisplayed: boolean
 ): void {
-  cy.get('cx-configurator-attribute-header').within(() => {
-    cy.get(`#cx-configurator--attribute-msg--${attribute}`).within(() => {
+  cy.get(
+    `cx-configurator-attribute-header #cx-configurator--attribute-msg--${attribute}`
+  ).within(() => {
+    if (isLinkDisplayed) {
       cy.get('a.cx-action-link').should('be.visible');
       cy.log(linkName + ' is displayed');
-    });
+    } else {
+      cy.get('a.cx-action-link').should('not.to.exist');
+      cy.log(linkName + ' is NOT displayed');
+    }
   });
 }
 
@@ -532,6 +573,19 @@ export function registerConfigurationUpdateRoute() {
       'BASE_SITE'
     )}/ccpconfigurator/*`,
   }).as(UPDATE_CONFIG_ALIAS.substring(1)); // strip the '@'
+  registerConfigurationPricingRoute(); // implicitly register config pricing route
+}
+
+/**
+ * Register configuration update route using name @see UPDATE_CONFIG_ALIAS
+ */
+export function registerConfigurationPricingRoute() {
+  cy.intercept({
+    method: 'GET',
+    path: `${Cypress.env('OCC_PREFIX')}/${Cypress.env(
+      'BASE_SITE'
+    )}/ccpconfigurator/*/pricing*`,
+  }).as(CONFIG_PRICING_ALIAS.substring(1)); // strip the '@'
 }
 
 /**
@@ -541,34 +595,103 @@ export function registerConfigurationUpdateRoute() {
  * @param {string} attributeName - Attribute name
  * @param {uiType} uiType - UI type
  * @param {string} valueName - Value name
- * @param {string} value - Value
+ * @param {boolean} isPricingEnabled - will wait also for pricing request in case pricing is enabled
  */
 export function selectAttributeAndWait(
   attributeName: string,
   uiType: configuration.uiType,
   valueName: string,
-  value?: string
+  isPricingEnabled?: boolean
 ): void {
-  configuration.selectAttribute(attributeName, uiType, valueName, value);
-  cy.wait(UPDATE_CONFIG_ALIAS);
+  configuration.selectAttribute(attributeName, uiType, valueName, false);
+  waitForRequest(UPDATE_CONFIG_ALIAS, isPricingEnabled);
+}
+
+/**
+ * wait for the given request alias and the following pricing requests if pricing is enabled
+ * @param {string} requestAlias - request alias to wait for
+ * @param {boolean} isPricingEnabled - will wait also for pricing request in case pricing is enabled
+ */
+export function waitForRequest(
+  requestAlias: string,
+  isPricingEnabled?: boolean
+) {
+  if (requestAlias) {
+    cy.wait(requestAlias);
+  }
+  // Give the pricing request some time to fire, otherwise cy matches the wait against the last pricing request,
+  // in case this last request had not already been waited for. In other words, we could remove the cy.wait(100),
+  // if we ensure that we wait for every pricing request happened before. However not all TC do this, yet.
+  if (isPricingEnabled) {
+    cy.wait(100);
+    cy.wait(CONFIG_PRICING_ALIAS);
+  }
 }
 
 /**
  * Clicks on the next group Button and verifies that an element of the next group is displayed.
  *
- * @param {string} nextGroup - Expected next group name
+ * @param {string} nextGroup - optional - expected next group name
+ * @param {boolean} isPricingEnabled - will wait also for pricing request in case pricing is enabled
  */
-export function clickOnNextBtnAndWait(nextGroup: string): void {
+export function clickOnNextBtnAndWait(
+  nextGroup?: string,
+  isPricingEnabled?: boolean
+): void {
   configuration.clickOnNextBtn(nextGroup);
-  cy.wait(GET_CONFIG_ALIAS);
+  waitForRequest(GET_CONFIG_ALIAS, isPricingEnabled);
 }
 
 /**
  * Clicks on the previous group Button and verifies that an element of the previous group is displayed.
  *
- * @param {string} previousGroup - Expected previous group name
+ * @param {string} previousGroup - optional - expected previous group name
+ * @param {boolean} isPricingEnabled - will wait also for pricing request in case pricing is enabled
  */
-export function clickOnPreviousBtnAndWait(previousGroup: string): void {
+export function clickOnPreviousBtnAndWait(
+  previousGroup?: string,
+  isPricingEnabled?: boolean
+): void {
   configuration.clickOnPreviousBtn(previousGroup);
-  cy.wait(GET_CONFIG_ALIAS);
+  waitForRequest(GET_CONFIG_ALIAS, isPricingEnabled);
+}
+
+export class CommerceRelease {
+  isAtLeast2205?: boolean;
+  isAtLeast2211?: boolean;
+  isPricingEnabled?: boolean;
+}
+
+export function checkCommerceRelease(
+  shop: string,
+  product: string,
+  commerceRelease
+) {
+  cy.request(
+    'GET',
+    Cypress.env('API_URL') +
+      Cypress.env('OCC_PREFIX') +
+      '/' +
+      shop +
+      '/products/' +
+      product +
+      '/configurators/ccpconfigurator'
+  ).then(({ body }) => {
+    cy.wrap(body).as('responseBodyVersionCheck');
+  });
+  cy.get('@responseBodyVersionCheck').then((responseBody: any) => {
+    const responseAsString = JSON.stringify(responseBody);
+    commerceRelease.isAtLeast2205 = responseAsString.includes('retractBlocked');
+    commerceRelease.isAtLeast2211 = responseAsString.includes(
+      'immediateConflictResolution'
+    );
+    commerceRelease.isPricingEnabled = responseBody.pricingEnabled;
+    cy.log(
+      'Is at least 22.05 commerce release: ' + commerceRelease.isAtLeast2205
+    );
+    cy.log(
+      'Is at least 22.11 commerce release: ' + commerceRelease.isAtLeast2211
+    );
+    cy.log('Is pricing enabled: ' + commerceRelease.isPricingEnabled);
+  });
 }
