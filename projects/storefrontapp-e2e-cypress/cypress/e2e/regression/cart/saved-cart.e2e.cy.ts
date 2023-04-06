@@ -4,14 +4,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import * as savedCart from '../../../../helpers/b2b/b2b-saved-cart';
-import { viewportContext } from '../../../../helpers/viewport-context';
-import * as sampleData from '../../../../sample-data/b2b-saved-cart';
-import { clearAllStorage } from '../../../../support/utils/clear-all-storage';
+import * as savedCart from '../../../helpers/saved-cart';
+import * as cart from '../../../helpers/cart';
+import { viewportContext } from '../../../helpers/viewport-context';
+import * as sampleData from '../../../sample-data/saved-cart';
+import { clearAllStorage } from '../../../support/utils/clear-all-storage';
 
-// TODO: Remove 'flaky' from file name when the test is fixed
-// https://jira.tools.sap/browse/CXSPA-638
-context('B2B - Saved Cart', () => {
+context('Saved Cart', () => {
   viewportContext(['mobile', 'desktop'], () => {
     before(() => {
       clearAllStorage();
@@ -19,6 +18,11 @@ context('B2B - Saved Cart', () => {
 
     describe('Accessibility - keyboarding', () => {
       describe('Cart page', () => {
+        before(() => {
+          cart.loginRegisteredUser();
+          savedCart.waitForCartPageData(sampleData.products[2]);
+          savedCart.visitCartPage();
+        });
         it('should conform to tabbing order', () => {
           savedCart.verifyCartPageTabbingOrder();
         });
@@ -26,8 +30,8 @@ context('B2B - Saved Cart', () => {
 
       describe('Modal', () => {
         before(() => {
-          savedCart.loginB2bUser();
-          savedCart.waitForCartPageData(sampleData.products[1]);
+          cart.loginRegisteredUser();
+          savedCart.waitForCartPageData(sampleData.products[2]);
           savedCart.visitCartPage();
         });
 
@@ -38,8 +42,8 @@ context('B2B - Saved Cart', () => {
 
       describe('Saved Cart Listing Page', () => {
         before(() => {
-          savedCart.loginB2bUser();
-          savedCart.waitForSavedCartListingPageData(sampleData.products[0]);
+          cart.loginRegisteredUser();
+          savedCart.waitForSavedCartListingPageData(sampleData.products[2]);
           savedCart.visitSavedCartListingPage();
         });
 
@@ -50,8 +54,8 @@ context('B2B - Saved Cart', () => {
 
       describe('Saved Cart Details Page', () => {
         before(() => {
-          savedCart.loginB2bUser();
-          savedCart.waitForSavedCartDetailsPageData(sampleData.products[0]);
+          cart.loginRegisteredUser();
+          savedCart.waitForSavedCartDetailsPageData(sampleData.products[2]);
         });
 
         it('should conform to tabbing order', () => {
@@ -77,10 +81,12 @@ context('B2B - Saved Cart', () => {
     describe('Cart page', () => {
       describe('Anonymous user', () => {
         beforeEach(() => {
-          savedCart.addProductToCart(sampleData.products[0], 2);
+          clearAllStorage();
+          savedCart.addProductToCart(sampleData.products[2], 2);
         });
 
         afterEach(() => {
+          cy.wait(2000);
           cy.location('pathname').should('contain', '/login');
         });
 
@@ -95,8 +101,9 @@ context('B2B - Saved Cart', () => {
 
       describe('Logged in user', () => {
         beforeEach(() => {
-          savedCart.loginB2bUser();
-          savedCart.waitForCartPageData(sampleData.products[1]);
+          clearAllStorage();
+          cart.loginRegisteredUser();
+          savedCart.waitForCartPageData(sampleData.products[2]);
           savedCart.visitCartPage();
         });
 
@@ -113,12 +120,13 @@ context('B2B - Saved Cart', () => {
 
     describe('Saved Cart Listing Page', () => {
       beforeEach(() => {
-        savedCart.loginB2bUser();
+        clearAllStorage();
+        cart.loginRegisteredUser();
       });
 
       it('should make cart active and not swap cart when active cart is empty', () => {
         savedCart.restoreCart(
-          sampleData.products[1],
+          sampleData.products[2],
           sampleData.savedActiveCartForm[2],
           true
         );
@@ -126,7 +134,7 @@ context('B2B - Saved Cart', () => {
 
       it('should make cart active and not swap cart when active cart is empty, and clone saved cart with new cart name', () => {
         savedCart.restoreCart(
-          sampleData.products[1],
+          sampleData.products[2],
           sampleData.savedActiveCartForm[2],
           true,
           { isCloneCartActive: true, cloneName: 'newClonedName' }
@@ -137,10 +145,10 @@ context('B2B - Saved Cart', () => {
         savedCart.waitForCartPageData(sampleData.products[2]);
         savedCart.visitCartPage();
 
-        savedCart.verifyCartDetails(sampleData.savedCarts.carts[1]);
+        savedCart.verifyCartDetails(sampleData.savedCarts.carts[0]);
 
         savedCart.restoreCart(
-          sampleData.products[1],
+          sampleData.products[2],
           sampleData.savedActiveCartForm[2]
         );
       });
@@ -149,10 +157,10 @@ context('B2B - Saved Cart', () => {
         savedCart.waitForCartPageData(sampleData.products[2]);
         savedCart.visitCartPage();
 
-        savedCart.verifyCartDetails(sampleData.savedCarts.carts[1]);
+        savedCart.verifyCartDetails(sampleData.savedCarts.carts[0]);
 
         savedCart.restoreCart(
-          sampleData.products[1],
+          sampleData.products[2],
           sampleData.savedActiveCartForm[2],
           false,
           { isCloneCartActive: true }
@@ -162,19 +170,20 @@ context('B2B - Saved Cart', () => {
 
     describe('Saved Cart Details Page', () => {
       beforeEach(() => {
-        savedCart.loginB2bUser();
+        clearAllStorage();
+        cart.loginRegisteredUser();
       });
 
       it('should update saved cart name and description, and delete it from the modal', () => {
         savedCart.updateSavedCartAndDelete(
-          sampleData.products[1],
+          sampleData.products[2],
           sampleData.savedActiveCartForm[3]
         );
       });
 
       it('should update saved cart name and description, and delete it from 0 entries', () => {
         savedCart.updateSavedCartAndDelete(
-          sampleData.products[1],
+          sampleData.products[2],
           sampleData.savedActiveCartForm[0],
           true
         );
@@ -182,17 +191,8 @@ context('B2B - Saved Cart', () => {
 
       it('should update saved cart name and description, and restore it', () => {
         savedCart.updateSavedCartAndRestore(
-          sampleData.products[1],
-          sampleData.savedActiveCartForm[0],
-          false
-        );
-      });
-
-      it('should update saved cart name and description, and add to current cart', () => {
-        savedCart.updateSavedCartAndRestore(
-          sampleData.products[1],
-          sampleData.savedActiveCartForm[0],
-          true
+          sampleData.products[2],
+          sampleData.savedActiveCartForm[0]
         );
       });
     });
